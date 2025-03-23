@@ -33,36 +33,6 @@ Web scraping may violate some websites' terms of service. Use at your own risk.
 - Compression
 - Request rotation system
 
-## Installation
-
-1. Clone repository:
-```bash
-git clone https://github.com/yourusername/udemy-coupons-api.git
-cd udemy-coupons-api
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start server:
-```bash
-npm start
-```
-
-## Usage
-
-### Get Main Courses
-```bash
-curl http://localhost:3000/courses?page=1
-```
-
-### Search Courses
-```bash
-curl http://localhost:3000/search/javascript?page=2
-```
-
 ## API Endpoints
 
 | Endpoint | Parameters | Description |
@@ -117,18 +87,6 @@ NODE_ENV=development npm start
 heroku addons:create heroku-redis  # For persistent caching
 heroku config:set NODE_ENV=production
 ```
-
-## Contributing
-
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details
 
 ---
 
