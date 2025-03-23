@@ -27,6 +27,9 @@ app.use(compression());
 
 // Enhanced Fetch Function
 async function fetchData(url, isCouponscorpion = false) {
+  // Add 2-5 second random delay
+  await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+
   const cached = cache.get(url);
   if (cached) return cached;
 
@@ -39,12 +42,23 @@ async function fetchData(url, isCouponscorpion = false) {
       'DNT': '1'
     };
 
-    const response = await axios.get(url, {
+    const PROXY = process.env.PROXY; // http://user:pass@host:port
+    const axiosConfig = {
       headers,
       timeout: 15000,
       validateStatus: () => true,
       maxRedirects: 5
-    });
+    };
+
+    if (PROXY) {
+      axiosConfig.proxy = {
+        protocol: 'http',
+        host: PROXY.split('@')[1].split(':')[0],
+        port: parseInt(PROXY.split(':').pop())
+      };
+    }
+
+    const response = await axios.get(url, axiosConfig);
 
     if (response.headers['set-cookie']) {
       cookieStore = response.headers['set-cookie'].join('; ');
@@ -65,22 +79,22 @@ async function fetchData(url, isCouponscorpion = false) {
 function extractUdemyFreebiesCourses($) {
   const courses = [];
   
-  $('#coupon-page .col-md-4.col-sm-6 .theme-block').each((i, el) => {
+  $('.theme-block').each((i, el) => { // Simplified selector
     const $el = $(el);
     const priceText = $el.find('.fa-money').parent().text().trim();
     
-    if (!/free$/i.test(priceText)) return;
+    if (!/free/i.test(priceText)) return;
 
     const course = {
       date: $el.find('small.text-muted').first().text().trim(),
       title: $el.find('.coupon-name h4').text().trim(),
       category: $el.find('.coupon-specility p').text().trim(),
       details: {
-        language: $el.find('.fa-comment').parent().contents().last().text().trim(),
-        instructor: $el.find('.fa-user').parent().contents().last().text().trim(),
-        rating: $el.find('.fa-star').parent().contents().last().text().replace('Rate:', '').trim(),
-        students: $el.find('.fa-users').parent().contents().last().text().replace('Enroll:', '').trim(),
-        originalPrice: priceText.match(/\$\d+/)?.[0]
+        language: $el.find("i.fa-comment").parent().text().replace("English", "").trim(),
+        instructor: $el.find("i.fa-user").parent().text().replace("Filip Flego", "").trim(),
+        rating: $el.find("i.fa-star").parent().text().replace("Rate:", "").trim(),
+        students: $el.find("i.fa-users").parent().text().replace("Enroll:", "").trim(),
+        originalPrice: priceText.match(/\$\d+/)?.[0] || 'Free'
       },
       detailUrl: $el.find('.coupon-details a[href]').attr('href')
     };
@@ -92,19 +106,42 @@ function extractUdemyFreebiesCourses($) {
 }
 
 // Couponscorpion Functions
-function extractCouponscorpionCourses($) {
+function extractCouponscorpionCourses($, isSearch = false) {
   const courses = [];
   
-  $('.eq_grid.pt5 .col_item.offer_grid').each((i, el) => {
+  const selector = isSearch ? '.news-community' : '.eq_grid.pt5 .col_item.offer_grid';
+  
+  $(selector).each((i, el) => {
     const $el = $(el);
-    const title = $el.find('h3 a').text().trim();
-    const date = $el.find('.date_ago').text().replace('ago', '').trim();
-    const discount = $el.find('.grid_onsale').text().trim();
-    const category = $el.find('.cat_link_meta a').first().text().trim();
-    const detailUrl = $el.find('h3 a').attr('href');
+    
+    // For search results
+    if (isSearch) {
+      const title = $el.find('h2 a').text().trim();
+      const date = $el.find('.date_meta').text().trim();
+      const category = $el.find('.cat_link_meta a').first().text().trim();
+      const detailUrl = $el.find('h2 a').attr('href');
 
-    if (title && discount.includes('100%')) {
-      courses.push({ title, date, discount, category, detailUrl });
+      if (title) {
+        courses.push({
+          title,
+          date,
+          category,
+          detailUrl,
+          discount: '100% OFF' // Search results don't show discount
+        });
+      }
+    }
+    // For main page
+    else {
+      const title = $el.find('h3 a').text().trim();
+      const date = $el.find('.date_ago').text().replace('ago', '').trim();
+      const discount = $el.find('.grid_onsale').text().trim();
+      const category = $el.find('.cat_link_meta a').first().text().trim();
+      const detailUrl = $el.find('h3 a').attr('href');
+
+      if (title && discount.includes('100%')) {
+        courses.push({ title, date, discount, category, detailUrl });
+      }
     }
   });
 
@@ -146,8 +183,55 @@ async function getCouponscorpionCoupon(detailUrl) {
   }
 }
 
+async function getUdemyCoupon(detailUrl) {
+  // Check coupon cache
+  const cachedCoupon = cache.get(COUPON_CACHE_PREFIX + detailUrl);
+  if (cachedCoupon) return cachedCoupon;
+
+  try {
+    const data = await fetchData(detailUrl);
+    const $ = cheerio.load(data);
+    
+    // Get price from original course data
+    const price = $('.fa-money').parent().text().match(/\$\d+/)?.[0] || 'Free';
+    
+    // Use POST instead of GET for coupon links
+    const couponLink = $('a.button-icon[href^="https://www.udemyfreebies.com/out/"]');
+    if (!couponLink.length) return null;
+
+    const formData = new URLSearchParams();
+    formData.append('security_check', '1');
+
+    const response = await axios.post(couponLink.attr('href'), formData, {
+      headers: {
+        'User-Agent': currentUserAgent,
+        'Referer': detailUrl,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      maxRedirects: 5,
+      validateStatus: null
+    });
+
+    const finalUrl = response.request.res.responseUrl;
+    
+    // Cache with proper structure
+    const result = {
+      couponUrl: finalUrl,
+      price: price
+    };
+    
+    cache.put(COUPON_CACHE_PREFIX + detailUrl, result, CACHE_DURATION);
+    return result;
+
+  } catch (error) {
+    console.error('Udemy Coupon Error:', error.message);
+    return null;
+  }
+}
+
 // Common Endpoint Handler
 async function handleEndpoint(req, res, url, isCouponscorpion = false) {
+  const isSearch = url.includes('?s=');
   const cacheKey = `${isCouponscorpion ? 'cscorp_' : ''}${COURSE_CACHE_PREFIX}${url}`;
   const cachedResults = cache.get(cacheKey);
   if (cachedResults) return res.json(cachedResults);
@@ -157,7 +241,7 @@ async function handleEndpoint(req, res, url, isCouponscorpion = false) {
     const $ = cheerio.load(html);
 
     const courses = isCouponscorpion ? 
-      extractCouponscorpionCourses($) : 
+      extractCouponscorpionCourses($, isSearch) : 
       extractUdemyFreebiesCourses($);
 
     const results = [];
