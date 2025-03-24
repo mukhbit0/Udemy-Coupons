@@ -132,6 +132,56 @@ function extractCouponscorpionCourses($, isSearch = false) {
   return courses;
 }
 
+function extractCorpionRegularCourses($) {
+  const courses = [];
+  $('.eq_grid.pt5 .col_item.offer_grid').each((i, el) => {
+    const $el = $(el);
+    const title = $el.find('h3 a').text().trim();
+    const date = $el.find('.date_ago').text().replace('ago', '').trim();
+    const discount = $el.find('.grid_onsale').text().trim();
+    const category = $el.find('.cat_link_meta a').first().text().trim();
+    const detailUrl = $el.find('h3 a').attr('href');
+
+    if (title && discount.includes('100%')) {
+      courses.push({ 
+        title,
+        date,
+        discount,
+        category: category || 'Development',
+        detailUrl
+      });
+    }
+  });
+  return courses;
+}
+
+function extractCorpionSearchResults($) {
+  const courses = [];
+  $('.news-community').each((i, el) => {
+    const $el = $(el);
+    const title = $el.find('h2 a').text().trim();
+    const rawDate = $el.find('.date_meta').text().trim();
+    const category = $el.find('.cat_link_meta a').first().text().trim() || 'Development';
+    const detailUrl = $el.find('h2 a').attr('href');
+
+    // Convert date format from "March 23, 2025" to "23 minutes" format
+    const dateObj = new Date(rawDate);
+    const minutesAgo = Math.floor((new Date() - dateObj) / (1000 * 60));
+    const date = minutesAgo > 60 ? `${Math.floor(minutesAgo / 60)} hours` : `${minutesAgo} minutes`;
+
+    if (title) {
+      courses.push({
+        title,
+        date,
+        discount: '100% OFF', // Search results always show 100% off
+        category,
+        detailUrl
+      });
+    }
+  });
+  return courses;
+}
+
 async function getCouponscorpionCoupon(detailUrl) {
   try {
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
@@ -207,7 +257,8 @@ async function getUdemyCoupon(detailUrl) {
 }
 
 async function handleEndpoint(req, res, url, isCouponscorpion = false) {
-  const cacheKey = `${isCouponscorpion ? 'cscorp_' : ''}${COURSE_CACHE_PREFIX}${url}${req.params.query || ''}`;
+  const isSearch = url.includes('?s=');
+  const cacheKey = `${isCouponscorpion ? 'cscorp_' : ''}${isSearch ? 'search_' : ''}${COURSE_CACHE_PREFIX}${url}`;
   const cachedResults = cache.get(cacheKey);
 
   if (cachedResults) {
@@ -218,12 +269,8 @@ async function handleEndpoint(req, res, url, isCouponscorpion = false) {
     const html = await fetchData(url, isCouponscorpion);
     const $ = cheerio.load(html);
 
-    if (isCouponscorpion && url.includes('?s=')) {
-      isSearch = true;
-    }
-
     const courses = isCouponscorpion ? 
-      extractCouponscorpionCourses($, isSearch) : 
+      (isSearch ? extractCorpionSearchResults($) : extractCorpionRegularCourses($)) : 
       extractUdemyFreebiesCourses($);
 
     // Fix course ID generation for CouponScorpion
