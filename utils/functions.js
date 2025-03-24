@@ -214,44 +214,29 @@ async function handleEndpoint(req, res, url, isCouponscorpion = false) {
   }
 
   try {
-    const html = await Promise.race([
-      fetchData(url, isCouponscorpion),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Initial fetch timeout')), TIMEOUT - 2000)
-      )
-    ]);
-
+    const html = await fetchData(url, isCouponscorpion);
     const $ = cheerio.load(html);
+
     const courses = isCouponscorpion ? 
       extractCouponscorpionCourses($) : 
       extractUdemyFreebiesCourses($);
 
-    const results = await async.mapLimit(courses, 3, async (course) => {
-      try {
-        const couponInfo = isCouponscorpion ?
-          await getCouponscorpionCoupon(course.detailUrl) :
-          await getUdemyCoupon(course.detailUrl);
-
-        return {
-          ...course,
-          ...couponInfo,
-          expired: !couponInfo?.couponUrl
-        };
-      } catch (error) {
-        return { ...course, expired: true };
-      }
-    });
+    // Fix course ID generation for CouponScorpion
+    const results = courses.map(course => ({
+      ...course,
+      id: isCouponscorpion ? 
+        course.detailUrl.replace('https://couponscorpion.com/', '').replace(/\/$/, '') :
+        course.detailUrl.split('/').pop()
+    }));
 
     const response = {
       success: true,
       currentPage: req.query.page || 1,
-      results: results.filter(c => !c.expired)
+      results: results
     };
 
     cache.put(cacheKey, response, CACHE_DURATION);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.write(JSON.stringify(response));
-    res.end();
+    res.json(response);
 
   } catch (error) {
     res.status(500).json({ 
