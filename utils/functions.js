@@ -99,12 +99,13 @@ function extractCouponscorpionCourses($, isSearch = false) {
 
   $(selector).each((i, el) => {
     const $el = $(el);
-
+    
     if (isSearch) {
       const title = $el.find('h2 a').text().trim();
       const date = $el.find('.date_meta').text().trim();
-      const category = $el.find('.cat_link_meta a').first().text().trim();
+      const category = $el.find('.cat_link_meta a').first().text().trim() || 'Development'; // Fallback category
       const detailUrl = $el.find('h2 a').attr('href');
+      const discount = '100% OFF'; // Search results always show 100% off
 
       if (title) {
         courses.push({
@@ -112,7 +113,7 @@ function extractCouponscorpionCourses($, isSearch = false) {
           date,
           category,
           detailUrl,
-          discount: '100% OFF'
+          discount
         });
       }
     } else {
@@ -206,7 +207,7 @@ async function getUdemyCoupon(detailUrl) {
 }
 
 async function handleEndpoint(req, res, url, isCouponscorpion = false) {
-  const cacheKey = `${isCouponscorpion ? 'cscorp_':''}${COURSE_CACHE_PREFIX}${url}`;
+  const cacheKey = `${isCouponscorpion ? 'cscorp_' : ''}${COURSE_CACHE_PREFIX}${url}${req.params.query || ''}`;
   const cachedResults = cache.get(cacheKey);
 
   if (cachedResults) {
@@ -217,8 +218,12 @@ async function handleEndpoint(req, res, url, isCouponscorpion = false) {
     const html = await fetchData(url, isCouponscorpion);
     const $ = cheerio.load(html);
 
+    if (isCouponscorpion && url.includes('?s=')) {
+      isSearch = true;
+    }
+
     const courses = isCouponscorpion ? 
-      extractCouponscorpionCourses($) : 
+      extractCouponscorpionCourses($, isSearch) : 
       extractUdemyFreebiesCourses($);
 
     // Fix course ID generation for CouponScorpion

@@ -23,7 +23,7 @@ app.get('/corpion', (req, res) => handleEndpoint(req, res,
 ));
 
 app.get('/corpion/search/:query', (req, res) => handleEndpoint(req, res, 
-  `https://couponscorpion.com/?s=${encodeURIComponent(req.params.query)}&post_type=post&paged=${req.query.page || 1}`, true
+  `https://couponscorpion.com/page/${req.query.page || 1}/?s=${encodeURIComponent(req.params.query)}&post_type=post`, true
 ));
 
 // Direct coupon endpoints
