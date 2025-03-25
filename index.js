@@ -1,11 +1,22 @@
 const express = require('express');
 const compression = require('compression');
+const cors = require('cors'); // Added CORS package
 const { handleEndpoint } = require('./utils/functions');
 const { getCouponscorpionCoupon } = require('./utils/functions');
 const { getUdemyCoupon } = require('./utils/functions');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Enable CORS with specific origin
+app.use(cors({
+  origin: [
+    'https://sajwan05.github.io', // Your GitHub Pages domain
+    'http://localhost:3000'      // For local development
+  ],
+  methods: ['GET', 'HEAD'],      // Allowed HTTP methods
+  credentials: true              // Allow cookies if needed
+}));
 
 app.use(compression());
 
